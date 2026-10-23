@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2e7d5b">
+  <title>レシートチェッ君</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="bar">
+    <h1 id="title">レシートチェッ君</h1>
+    <button id="btn-settings" class="icon" aria-label="設定" hidden>⚙</button>
+  </header>
+
+  <main>
+    <!-- S0 初回設定 / 合言葉の変更 -->
+    <section id="s0" class="screen" hidden>
+      <p>Apps Script に登録した合言葉を入力してください。</p>
+      <label>合言葉<input id="passphrase" type="password" autocomplete="off"></label>
+      <p id="s0-msg" class="msg"></p>
+      <div class="actions">
+        <button id="btn-cancel-pass" class="sub" hidden>戻る</button>
+        <button id="btn-save-pass" class="main">接続確認</button>
+      </div>
+    </section>
+
+    <!-- S1 ホーム -->
+    <section id="s1" class="screen" hidden>
+      <div class="center">
+        <button id="btn-start" class="main big">レシートを撮る</button>
+      </div>
+      <p class="note" id="s1-info"></p>
+    </section>
+
+    <!-- S2 撮影 -->
+    <section id="s2" class="screen" hidden>
+      <p class="note" id="s2-hint">レシートの上の端から撮ってください。長いレシートは、上から順に分けて撮れます。</p>
+      <ol id="photos" class="photos"></ol>
+      <div class="actions">
+        <button id="btn-discard" class="sub">破棄</button>
+        <button id="btn-add" class="sub">撮る</button>
+        <button id="btn-read" class="main" disabled>読み取る</button>
+      </div>
+    </section>
+
+    <!-- S3 読み取り中 -->
+    <section id="s3" class="screen" hidden>
+      <div class="center">
+        <div class="spinner" id="s3-spinner"></div>
+        <p id="s3-msg">読み取っています…</p>
+        <p class="note" id="s3-elapsed"></p>
+      </div>
+      <div class="actions" id="s3-actions" hidden>
+        <button id="btn-back-photos" class="sub">撮影に戻る</button>
+        <button id="btn-retry" class="main">もう一度読み取る</button>
+      </div>
+    </section>
+
+    <!-- S4 読み取り結果（段階1 は表示のみ。修正と送信は段階2） -->
+    <section id="s4" class="screen" hidden>
+      <div id="result"></div>
+      <div class="actions">
+        <button id="btn-back-photos2" class="sub">撮影に戻る</button>
+        <button id="btn-done" class="main">終わる</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- スマホ標準のカメラを開く（ギャラリーは開かない） -->
+  <input id="camera" type="file" accept="image/*" capture="environment" hidden>
+</body>
+</html>
