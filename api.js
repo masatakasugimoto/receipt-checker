@@ -1,7 +1,7 @@
 // Apps Script の呼び出し
 
 // Apps Script をウェブアプリとしてデプロイしたときの URL（基本設計書 11-1）
-export const GAS_URL = 'https://script.google.com/macros/s/AKfycbzkXOvh_d7Lllww0rD2NOgsjZOImlOqmrhg4-UkXyQYc41PVPHoA5-Eskf0z5njvZMH/exec';
+export const GAS_URL = 'https://script.google.com/macros/s/AKfycbyDB0meNQHNSb0PTvn76Mzv8JO6TzgbdATig5pERexqNrJ4mYE6trrp8A5Y4WAb7X-I/exec';
 
 export class ApiError extends Error {
   constructor(code, message) {
