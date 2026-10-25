@@ -58,35 +58,9 @@
       </div>
     </section>
 
-    <!-- S4 確認・修正 -->
+    <!-- S4 読み取り結果の確認（表示のみ。修正はしない） -->
     <section id="s4" class="screen" hidden>
-      <div class="card">
-        <div class="form">
-          <label>店名<input data-field="store" type="text"></label>
-          <label>支店<input data-field="branch" type="text"></label>
-          <label>日付<input data-field="date" type="date"></label>
-          <label>時刻<input data-field="time" type="time"></label>
-          <label>支払
-            <select data-field="payment_method"></select>
-          </label>
-          <label>カード下4桁<input data-field="card_last4" type="text" inputmode="numeric" maxlength="4"></label>
-          <label>税
-            <select data-field="tax_mode"></select>
-          </label>
-          <label id="outer-tax-row">外税の消費税<input data-field="outer_tax" type="number" inputmode="numeric"></label>
-          <label>合計<input data-field="total" type="number" inputmode="numeric"></label>
-          <label>ポイント利用<input data-field="points_used" type="number" inputmode="numeric"></label>
-        </div>
-      </div>
-
-      <div id="check" class="card"></div>
-      <div id="warnings"></div>
-
-      <div class="card">
-        <h2>品目 <span class="note">（タップで修正）</span></h2>
-        <ul id="items" class="items"></ul>
-        <button id="btn-add-item" class="sub small">＋ 品目を追加</button>
-      </div>
+      <div id="result"></div>
 
       <div class="card">
         <h2>送信先</h2>
@@ -98,10 +72,10 @@
           <summary>メール本文のプレビュー</summary>
           <pre id="preview-body"></pre>
         </details>
-      </div>
-
-      <div class="card">
-        <dl class="kv" id="meta"></dl>
+        <details>
+          <summary>読み取りの情報（時間・費用）</summary>
+          <dl class="kv" id="meta"></dl>
+        </details>
       </div>
 
       <p id="s4-msg" class="msg"></p>
