@@ -140,6 +140,21 @@ table.items .raw { display: block; color: var(--sub-text); font-size: 12px; }
 
 .done { font-size: 56px; color: var(--ok); margin: 0; }
 
+/* S1 途中のレシート */
+.resume p { margin: 0 0 10px; }
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+
+/* S6 設定 */
+.recipient-list { list-style: none; margin: 8px 0; padding: 0; }
+.recipient-list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.recipient-list label { flex: 1; display: flex; align-items: center; gap: 8px; margin: 0; word-break: break-all; }
+.recipient-list input { width: 20px; height: 20px; flex: none; }
+.recipient-list .empty { color: var(--sub-text); }
+.add-row { display: flex; gap: 8px; margin-top: 10px; }
+.add-row input { flex: 1; margin: 0; padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+button.danger { color: var(--ng); border-color: var(--ng); background: var(--card); }
+
 /* 共通の枠 */
 .card {
   background: var(--card);

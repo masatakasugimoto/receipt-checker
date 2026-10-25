@@ -3,8 +3,11 @@
 import { callApi, ApiError } from './api.js';
 import { resizePhoto, blobToBase64 } from './image.js';
 import { checkTotal, estimateYen, yen, PAYMENT_LABELS, TAX_MODE_LABELS } from './receipt.js';
+import { saveDraft, loadDraft, clearDraft } from './store.js';
 
+const APP_VERSION = '0.3.0';
 const MAX_PHOTOS = 10;
+const EMAIL_PATTERN = /^[^\s@,;"<>]+@[^\s@,;"<>]+\.[^\s@,;"<>]+$/;
 
 const state = {
   passphrase: loadPassphrase(),
@@ -18,13 +21,15 @@ const state = {
   recipientsError: '', // 送信先の一覧を取れなかったときの理由
   selected: new Set(), // このレシートを送る宛先
   sending: false,
+  settingsList: [],    // 設定画面で編集中の送信先
+  settingsDirty: false,
 };
 
 const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------------ 画面の切り替え
 
-const TITLES = { s0: '合言葉', s1: 'レシートチェッ君', s2: '撮影', s3: '読み取り', s4: '読み取り結果', s5: '送信完了' };
+const TITLES = { s0: '合言葉', s1: 'レシートチェッ君', s2: '撮影', s3: '読み取り', s4: '読み取り結果', s5: '送信完了', s6: '設定' };
 
 function show(id) {
   document.querySelectorAll('.screen').forEach((el) => { el.hidden = el.id !== id; });
@@ -44,6 +49,77 @@ function newReceiptId() {
   b[8] = (b[8] & 0x3f) | 0x80;
   const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+// ------------------------------------------------------------------ 途中保存
+
+// 保存は順番に行う（前の保存が終わる前に次の保存が始まって、古い内容で上書きされないように）
+let saving = Promise.resolve();
+
+function persistDraft() {
+  if (!state.receiptId) return saving;
+  const snapshot = {
+    receiptId: state.receiptId,
+    photos: state.photos.map((p) => p.blob),
+    receipt: state.receipt,
+    readInfo: state.readInfo,
+  };
+  saving = saving.then(() => saveDraft(snapshot));
+  return saving;
+}
+
+function dropDraft() {
+  saving = saving.then(() => clearDraft());
+  return saving;
+}
+
+// ------------------------------------------------------------------ ホーム（S1）
+
+async function goHome() {
+  show('s1');
+  await saving;
+  const draft = await loadDraft();
+  $('resume').hidden = !draft;
+  if (draft) {
+    const t = new Date(draft.updatedAt);
+    const when = `${t.getMonth() + 1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`;
+    $('resume-msg').textContent = `途中のレシートがあります（写真 ${draft.photos.length}枚${draft.receipt ? '・読み取り済み' : ''}、${when}）`;
+  }
+}
+
+async function onResume() {
+  const draft = await loadDraft();
+  if (!draft) {
+    goHome();
+    return;
+  }
+  clearPhotos();
+  state.receiptId = draft.receiptId;
+  state.photos = draft.photos.map((blob) => ({ blob, url: URL.createObjectURL(blob) }));
+  state.receipt = draft.receipt;
+  state.readInfo = draft.readInfo;
+  if (!state.receipt) {
+    renderPhotos();
+    show('s2');
+    return;
+  }
+  // 読み取り済みなら結果の画面へ（送信先の一覧は取り直す）
+  try {
+    await loadRecipients();
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'UNAUTHORIZED') {
+      openPassphrase();
+      return;
+    }
+  }
+  renderResult();
+  show('s4');
+}
+
+async function onDropDraft() {
+  if (!confirm('途中のレシートを破棄しますか？')) return;
+  clearReceipt();
+  goHome();
 }
 
 // ------------------------------------------------------------------ 合言葉（S0）
@@ -85,7 +161,7 @@ async function onSavePassphrase() {
     state.passphrase = value;
     savePassphrase(value);
     $('s1-info').textContent = `接続先: Apps Script v${res.version}（${res.model}）`;
-    show('s1');
+    goHome();
   } catch (err) {
     $('s0-msg').textContent = err.message;
   } finally {
@@ -96,6 +172,7 @@ async function onSavePassphrase() {
 // ------------------------------------------------------------------ 撮影（S2）
 
 function startReceipt() {
+  if (!$('resume').hidden && !confirm('途中のレシートを破棄して、新しいレシートを撮りますか？')) return;
   clearReceipt();
   state.receiptId = newReceiptId();
   renderPhotos();
@@ -138,7 +215,15 @@ async function onPhotoTaken() {
     state.photos[state.replaceIndex] = photo;
   }
   state.replaceIndex = null;
+  photosChanged();
+}
+
+/** 写真を変えたら、前の読み取り結果は使えないので捨てて、途中保存する */
+function photosChanged() {
+  state.receipt = null;
+  state.readInfo = null;
   renderPhotos();
+  persistDraft();
 }
 
 function renderPhotos() {
@@ -184,21 +269,27 @@ function onPhotoOp(op, i) {
     URL.revokeObjectURL(photos[i].url);
     photos.splice(i, 1);
   }
-  renderPhotos();
+  photosChanged();
 }
 
-function clearReceipt() {
+function clearPhotos() {
   state.photos.forEach((p) => URL.revokeObjectURL(p.url));
   state.photos = [];
+}
+
+/** 今のレシートを終わりにする（送信した・破棄した）。途中保存も消す */
+function clearReceipt() {
+  clearPhotos();
   state.receiptId = null;
   state.receipt = null;
   state.readInfo = null;
+  dropDraft();
 }
 
 function onDiscard() {
   if ((state.photos.length || state.receipt) && !confirm('このレシートを破棄しますか？')) return;
   clearReceipt();
-  show('s1');
+  goHome();
 }
 
 // ------------------------------------------------------------------ 読み取り（S3）
@@ -220,17 +311,15 @@ async function onRead() {
       data: await blobToBase64(p.blob),
     })));
     // 送信先の一覧も同時に取りに行く（取れなくても読み取り結果は表示する）
-    const [read, settings] = await Promise.allSettled([
+    const [read] = await Promise.allSettled([
       callApi('read', state.passphrase, { images }),
-      callApi('getSettings', state.passphrase),
+      loadRecipients().catch(() => {}),
     ]);
     if (read.status === 'rejected') throw read.reason;
     const res = read.value;
     state.receipt = res.receipt;
     state.readInfo = { model: res.model, usage: res.usage, elapsedMs: res.elapsedMs, totalMs: Date.now() - started };
-    state.recipients = settings.status === 'fulfilled' ? settings.value.recipients : [];
-    state.recipientsError = settings.status === 'rejected' ? settings.reason.message : '';
-    state.selected = new Set(state.recipients.filter((r) => r.enabled).map((r) => r.email));
+    persistDraft();
     renderResult();
     show('s4');
   } catch (err) {
@@ -247,6 +336,21 @@ async function onRead() {
 }
 
 // ------------------------------------------------------------------ 読み取り結果の確認（S4）
+
+/** 送信先の一覧を取り、「送る」設定のアドレスにチェックを入れる。取れなければ理由を残して例外を投げ直す */
+async function loadRecipients() {
+  try {
+    const res = await callApi('getSettings', state.passphrase);
+    state.recipients = res.recipients;
+    state.recipientsError = '';
+  } catch (err) {
+    state.recipients = [];
+    state.recipientsError = err.message;
+    throw err;
+  } finally {
+    state.selected = new Set(state.recipients.filter((r) => r.enabled).map((r) => r.email));
+  }
+}
 
 function renderResult() {
   const r = state.receipt;
@@ -300,7 +404,7 @@ function renderRecipients() {
     return;
   }
   if (!state.recipients.length) {
-    box.innerHTML = '<p class="msg">送信先が登録されていません（Apps Script のスクリプト プロパティ RECIPIENTS に登録してください）</p>';
+    box.innerHTML = '<p class="msg">送信先が登録されていません（ホームの右上の ⚙ から登録してください）</p>';
     return;
   }
   box.innerHTML = '';
@@ -371,12 +475,118 @@ async function onSend() {
   }
 }
 
+// ------------------------------------------------------------------ 設定（S6）
+
+async function openSettings() {
+  show('s6');
+  $('s6-version').textContent = `レシートチェッ君 v${APP_VERSION}`;
+  $('s6-msg').textContent = '読み込んでいます…';
+  $('s6-list').innerHTML = '';
+  state.settingsDirty = false;
+  updateSettingsSave();
+  try {
+    const res = await callApi('getSettings', state.passphrase);
+    state.settingsList = res.recipients.map((r) => ({ ...r }));
+    $('s6-msg').textContent = '';
+    renderSettings();
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'UNAUTHORIZED') {
+      openPassphrase();
+      return;
+    }
+    $('s6-msg').textContent = err.message;
+  }
+}
+
+function renderSettings() {
+  const list = $('s6-list');
+  list.innerHTML = '';
+  if (!state.settingsList.length) {
+    list.innerHTML = '<li class="empty">まだ登録されていません</li>';
+  }
+  state.settingsList.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <label><input type="checkbox"><span>${esc(r.email)}</span></label>
+      <button class="small danger">削除</button>`;
+    const cb = li.querySelector('input');
+    cb.checked = r.enabled;
+    cb.addEventListener('change', () => {
+      r.enabled = cb.checked;
+      settingsChanged();
+    });
+    li.querySelector('button').addEventListener('click', () => {
+      if (!confirm(`${r.email} を削除しますか？`)) return;
+      state.settingsList.splice(i, 1);
+      renderSettings();
+      settingsChanged();
+    });
+    list.appendChild(li);
+  });
+}
+
+function settingsChanged() {
+  state.settingsDirty = true;
+  $('s6-msg').textContent = '';
+  updateSettingsSave();
+}
+
+function updateSettingsSave() {
+  $('btn-s6-save').disabled = !state.settingsDirty;
+}
+
+function onAddRecipient() {
+  const input = $('s6-new');
+  const email = input.value.trim();
+  if (!EMAIL_PATTERN.test(email)) {
+    $('s6-msg').textContent = 'メールアドレスの形式が正しくありません';
+    return;
+  }
+  if (state.settingsList.some((r) => r.email.toLowerCase() === email.toLowerCase())) {
+    $('s6-msg').textContent = 'すでに登録されています';
+    return;
+  }
+  state.settingsList.push({ email, enabled: true });
+  input.value = '';
+  renderSettings();
+  settingsChanged();
+}
+
+async function onSaveSettings() {
+  const btn = $('btn-s6-save');
+  btn.disabled = true;
+  $('s6-msg').textContent = '保存しています…';
+  try {
+    const res = await callApi('saveSettings', state.passphrase, { recipients: state.settingsList });
+    state.settingsList = res.recipients.map((r) => ({ ...r }));
+    state.settingsDirty = false;
+    renderSettings();
+    $('s6-msg').textContent = '保存しました';
+  } catch (err) {
+    $('s6-msg').textContent = err.message;
+  } finally {
+    updateSettingsSave();
+  }
+}
+
+function onSettingsBack() {
+  if (state.settingsDirty && !confirm('保存していない変更があります。変更を捨てて戻りますか？')) return;
+  goHome();
+}
+
 // ------------------------------------------------------------------ 起動
 
 function init() {
   $('btn-save-pass').addEventListener('click', onSavePassphrase);
-  $('btn-cancel-pass').addEventListener('click', () => show('s1'));
-  $('btn-settings').addEventListener('click', openPassphrase);
+  $('btn-cancel-pass').addEventListener('click', goHome);
+  $('btn-settings').addEventListener('click', openSettings);
+  $('btn-resume').addEventListener('click', onResume);
+  $('btn-drop').addEventListener('click', onDropDraft);
+  $('btn-s6-add').addEventListener('click', onAddRecipient);
+  $('s6-new').addEventListener('keydown', (e) => { if (e.key === 'Enter') onAddRecipient(); });
+  $('btn-s6-save').addEventListener('click', onSaveSettings);
+  $('btn-s6-back').addEventListener('click', onSettingsBack);
+  $('btn-s6-pass').addEventListener('click', openPassphrase);
   $('btn-start').addEventListener('click', startReceipt);
   $('btn-add').addEventListener('click', () => openCamera(null));
   $('btn-discard').addEventListener('click', onDiscard);
@@ -385,12 +595,16 @@ function init() {
   $('btn-back-photos').addEventListener('click', () => show('s2'));
   $('btn-back-photos2').addEventListener('click', () => show('s2'));
   $('btn-send').addEventListener('click', onSend);
-  $('btn-home').addEventListener('click', () => show('s1'));
+  $('btn-home').addEventListener('click', goHome);
   $('preview').addEventListener('toggle', () => { if ($('preview').open && state.receipt) loadPreview(); });
   $('camera').addEventListener('change', onPhotoTaken);
 
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('サービスワーカーを登録できませんでした', err));
+  }
+
   if (state.passphrase) {
-    show('s1');
+    goHome();
   } else {
     openPassphrase();
   }

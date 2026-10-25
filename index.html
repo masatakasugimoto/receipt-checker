@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2e7d5b">
   <title>レシートチェッ君</title>
+  <!-- ホーム画面に追加したとき全画面のアプリとして開く（Android: manifest、iPhone: apple-*） -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="レシートチェッ君">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
@@ -28,6 +36,13 @@
 
     <!-- S1 ホーム -->
     <section id="s1" class="screen" hidden>
+      <div class="card resume" id="resume" hidden>
+        <p id="resume-msg"></p>
+        <div class="row">
+          <button id="btn-drop" class="sub">破棄</button>
+          <button id="btn-resume" class="main">続きから</button>
+        </div>
+      </div>
       <div class="center">
         <button id="btn-start" class="main big">レシートを撮る</button>
       </div>
@@ -93,6 +108,29 @@
       </div>
       <div class="actions">
         <button id="btn-home" class="main">ホームへ</button>
+      </div>
+    </section>
+
+    <!-- S6 設定 -->
+    <section id="s6" class="screen" hidden>
+      <div class="card">
+        <h2>送信先メールアドレス</h2>
+        <p class="note">チェックを外したアドレスは、読み取り結果の画面で最初はチェックが外れた状態になります。</p>
+        <ul id="s6-list" class="recipient-list"></ul>
+        <div class="add-row">
+          <input id="s6-new" type="email" inputmode="email" autocomplete="email" placeholder="追加するメールアドレス">
+          <button id="btn-s6-add" class="sub">追加</button>
+        </div>
+        <p id="s6-msg" class="msg"></p>
+      </div>
+      <div class="card">
+        <h2>合言葉</h2>
+        <button id="btn-s6-pass" class="sub small">合言葉を変更する</button>
+      </div>
+      <p class="note" id="s6-version"></p>
+      <div class="actions">
+        <button id="btn-s6-back" class="sub">戻る</button>
+        <button id="btn-s6-save" class="main" disabled>保存</button>
       </div>
     </section>
   </main>
